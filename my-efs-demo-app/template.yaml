@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  my-efs-demo-app
+
+  Sample SAM Template for my-efs-demo-app
+
+Globals:
+  Function:
+    Timeout: 3
+
+Parameters:
+  SecurityGroupIds:
+    Type: CommaDelimitedList
+    Default: sg-ba0404e6
+  SubnetID:
+    Type: String
+    Description: SubnetIDs in your Virtual Private Cloud (VPC)
+    Default: subnet-e39eb2cd
+
+Resources:
+  EfsFileSystem:
+    Type: AWS::EFS::FileSystem
+    
+  MountTarget:
+    Type: AWS::EFS::MountTarget
+    Properties:
+      FileSystemId: !Ref EfsFileSystem
+      SubnetId: !Ref SubnetID
+      SecurityGroups: !Ref SecurityGroupIds 
+      
+  AccessPoint:
+    Type: AWS::EFS::AccessPoint
+    Properties:
+      FileSystemId: !Ref EfsFileSystem
+      PosixUser:
+        Gid: "1000"
+        Uid: "1000"
+      RootDirectory:
+        Path: "/lambda"
+        CreationInfo:
+          OwnerGid: "1000"
+          OwnerUid: "1000"
+          Permissions: "755"
+
+  HelloEfsFunction:
+    Type: AWS::Serverless::Function
+    DependsOn:
+      - MountTarget
+    Properties:
+      CodeUri: hello_efs/
+      Handler: app.lambda_handler
+      Runtime: python3.8
+      Policies:
+        - EFSWriteAccessPolicy:
+            FileSystem: !Ref EfsFileSystem
+            AccessPoint: !Ref AccessPoint
+      FileSystemConfigs:
+        - Arn: !GetAtt AccessPoint.Arn
+          LocalMountPath: /mnt/lambda
+      VpcConfig:
+        SecurityGroupIds: !Ref SecurityGroupIds
+        SubnetIds: 
+          - !Ref SubnetID
+      Events:
+        ReadFile:
+          Type: Api
+          Properties:
+            Path: /hello
+            Method: get
+        WriteFile:
+          Type: Api
+          Properties:
+            Path: /hello
+            Method: post
+
